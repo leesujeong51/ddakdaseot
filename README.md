@@ -13,7 +13,7 @@ python -m http.server 5173
 → Chrome 또는 Edge에서 http://localhost:5173 열기
 
 - 음성 인식: Chrome / Edge / Safari (Firefox 미지원 → 정답 보기로 대체)
-- 녹음 음성: `audio/{날짜번호}-{문장번호}-{ko|en}.mp3` (ElevenLabs · Anna Kim). 현재 1일차만 있음.
+- 녹음 음성: `audio/{날짜번호}-{문장번호}-{ko|en|ex}.mp3` (ElevenLabs · Anna Kim). 현재 1~3일차(문장·표현).
   다른 날을 추가하면 `app.js`의 `REC_DAYS`에 날짜 번호(0부터)를 넣으면 돼요. 녹음이 없는 문장은 기기 음성으로 읽어요.
 - 기기 음성 중 가장 자연스러운 것: Edge("Natural") > Chrome("Google") > Safari("Enhanced")
 

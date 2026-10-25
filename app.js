@@ -32,7 +32,7 @@ function streak() {
   while (has.has(iso(d))) { n++; d.setDate(d.getDate() - 1); }
   return n;
 }
-const mins = () => Math.max(1, Math.round((S.reps * 5 * 19 + 5 * 12) / 60));
+const mins = () => Math.max(1, Math.round((S.reps * 5 * 29 + 5 * 12) / 60));
 
 /* ── 효과음(Web Audio로 합성) · 진동 ── */
 let actx = null;
@@ -84,7 +84,7 @@ function pickVoices() {
 if ('speechSynthesis' in window) { pickVoices(); speechSynthesis.onvoiceschanged = pickVoices; }
 
 // 녹음이 있는 일차(0부터) · s = 문장(ko/en), x = 표현 · 파일: audio/{일차}-{번호}-{ko|en|ex}.mp3
-const REC = { s: [0], x: [] };
+const REC = { s: [0, 1, 2], x: [0, 1, 2] };
 const CLIPS = {};
 REC.s.forEach(d => DAYS[d].forEach((s, n) => {
   CLIPS[s[0]] = `audio/${d + 1}-${n + 1}-ko.mp3`;
@@ -149,6 +149,7 @@ const ICON = {
   list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   star: '<path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9z" fill="currentColor" stroke-width="1.5"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
   chest: '<path d="M3 11a9 6 0 0 1 18 0v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor" fill-opacity=".25"/><path d="M3 12h18"/><rect x="10" y="10" width="4" height="5" rx="1" fill="currentColor"/>',
 };
 const ico = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
@@ -184,8 +185,11 @@ let L = null;            // 문장 학습 {round, i, step, paused}
 let P = null;            // 5초 말하기 {i, phase, heard, res, scores, rec}
 let LS = null;           // 표현 레슨
 let D = null, E = null;  // 완료 요약 (문장 · 레슨)
-const STEPS = ['ko', 'think', 'en', 'shadow', 'en2'];
-const STEP_L = ['한국어', '생각', '영어', '따라', '영어'];
+// 한국어 → 생각 → (영어 → 따라) × 3
+const STEPS = ['ko', 'think', 'en', 'shadow', 'en', 'shadow', 'en', 'shadow'];
+const STEP_L = ['한국어', '생각', '영어', '따라'];
+const pillOf = step => Math.min(step, 2 + ((step - 2) % 2)); // 단계 → 표시할 버튼 번호
+const repOf = step => Math.max(1, Math.floor((step - 2) / 2) + 1); // 영어·따라 몇 번째(1~3)
 const SEG = [10, 30, 20, 100, 10, 50, 20, 0]; // 0 = 한 번 더
 const W = { a: 0, v: 0, on: false, stop: false, dec: 0, last: 0, seg: 0, auto: 0 };
 const g = (o = 0) => ((L.i + L.round + o) % 2 ? 'm' : 'f');
@@ -281,7 +285,9 @@ const answerOf = it => (it.t === 'listen' ? T[it.k][0] : it.t === 'meaning' ? T[
 
 function lessonBody(it) {
   const s = T[it.k], A = it.shown ? '' : 'anim';
-  const ask = `<div class="ask ${A}"><span class="mini">${buddy('happy', 60)}</span><div class="speech" lang="ko">${esc(s[0])}</div></div>`;
+  const ask = `<div class="ask ${A}"><span class="mini">${buddy('happy', 60)}</span>
+    <button class="speech" data-a="sayq" aria-label="다시 듣기"><span class="sp-ic">${ico('vol', 18)}</span><span lang="ko">${esc(s[0])}</span></button></div>`;
+  const tip = it.hinted && (it.t === 'listen' || it.t === 'meaning') ? `<p class="hintbox" lang="en">${ico('bulb', 16)} ${esc(s[1])}</p>` : '';
   if (it.t === 'build') return `${ask}
     <div class="answer" aria-label="내 답">${it.built.map(id => `<button class="tile" data-a="untile" data-v="${id}" lang="en">${esc(it.tiles[id])}</button>`).join('')}</div>
     <div class="bank ${A}">${it.tiles.map((w, id) => it.built.includes(id) ? `<span class="tile used" aria-hidden="true">${esc(w)}</span>`
@@ -291,12 +297,12 @@ function lessonBody(it) {
   if (it.t === 'listen') return `<div class="listen ${A}">
       <button class="spk big" data-a="hear" aria-label="듣기">${ico('vol', 44)}</button>
       <button class="spk small" data-a="hear" data-v="slow" aria-label="천천히 듣기">${ico('slow', 26)}</button></div>
-    ${choices(it.opts.map(k => T[k][0]), 'ko')}`;
+    ${tip}${choices(it.opts.map(k => T[k][0]), 'ko')}`;
   if (it.t === 'meaning') return `<div class="xprompt ${A}"><button class="spk small" data-a="hear" aria-label="듣기">${ico('vol', 26)}</button><b lang="en">${esc(s[2])}</b></div>
-    ${choices(it.opts, 'ko')}`;
+    ${tip}${choices(it.opts, 'ko')}`;
   const tail = it.toks[it.blank].slice(it.ans.length);
   return `${ask}<p class="fill ${A}" lang="en">${it.toks.map((w, j) => j === it.blank
-    ? `<span class="blank ${it.pick != null ? 'on' : ''}">${it.pick != null ? esc(it.opts[it.pick]) : '&nbsp;'}</span>${esc(tail)}` : esc(w)).join(' ')}</p>
+    ? `<span class="blank ${it.pick != null ? 'on' : ''}">${it.pick != null ? esc(it.opts[it.pick]) : it.hinted ? `${esc(it.ans[0])}…` : '&nbsp;'}</span>${esc(tail)}` : esc(w)).join(' ')}</p>
     ${choices(it.opts, 'en', true)}`;
 }
 
@@ -330,12 +336,15 @@ const V = {
     const s = T[L.i], st = STEPS[L.step], en = L.step >= 2;
     return `<section class="scr">
       ${bar(L.i + L.step / STEPS.length, `${L.round}/${S.reps}`)}
-      <ol class="steps" aria-label="단계">${STEP_L.map((t, k) => `<li class="${k < L.step ? 'did' : k === L.step ? 'now' : ''}" ${k === L.step ? 'aria-current="step"' : ''}>${k < L.step ? ico('check', 14) : ''}${t}</li>`).join('')}</ol>
-      <button class="stage" data-a="replay" aria-label="다시 듣기">
+      <ol class="steps" aria-label="단계">${STEP_L.map((t, k) => {
+        const p = pillOf(L.step), rep = repOf(L.step);
+        return `<li class="${k < p ? 'did' : k === p ? 'now' : ''}" ${k === p ? 'aria-current="step"' : ''}>${k < p && k < 2 ? ico('check', 14) : ''}${t}${k >= 2 ? `<small class="rep">${L.step >= 2 ? rep : 1}/3</small>` : ''}</li>`;
+      }).join('')}</ol>
+      <button class="stage" data-a="replay" aria-label="다시 듣기"><span class="replay" aria-hidden="true">${ico('vol', 20)}</span>
         <p class="ko ${en ? 'sub' : ''}" lang="ko">${kin(s[0])}</p>
         ${st === 'think' ? `<div class="cd"><svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><circle cx="48" cy="48" r="40"/><circle class="fg" cx="48" cy="48" r="40"/></svg><span id="cd" aria-live="polite">5</span></div>` : ''}
         ${en ? `<p class="en" lang="en">${kin(s[1])}</p>` : ''}
-        ${st.startsWith('en') && !CLIPS[s[1]] ? `<span class="who">${g(st === 'en2' ? 1 : 0) === 'f' ? '여성' : '남성'}</span>` : ''}
+        ${st.startsWith('en') && !CLIPS[s[1]] ? `<span class="who">${g(repOf(L.step) - 1) === 'f' ? '여성' : '남성'}</span>` : ''}
         ${st === 'shadow' ? `<span class="say">${ico('mic', 14)}따라 말해요</span>` : ''}
         ${st !== 'think' && st !== 'shadow' && !L.paused ? wave() : ''}
       </button>
@@ -350,9 +359,10 @@ const V = {
   speak: () => {
     const s = T[P.i], r = P.res, rec = P.phase === 'rec', result = P.phase === 'result';
     let body;
-    if (!result) body = `<div class="micwrap ${rec ? 'on' : ''}">
+    if (!result) body = `<div class="micwrap ${rec && P.live ? 'on' : ''}">
         <svg class="timer" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54"/><circle class="fg" cx="60" cy="60" r="54"/></svg>
-        <button class="mic" data-a="mic" aria-label="${rec ? '그만 말하기' : '지금 말하기'}">${ico('mic', 36)}</button></div>
+        <button class="mic" data-a="mic" aria-label="${rec ? '그만 말하기' : '눌러서 말하기'}">${ico('mic', 36)}</button></div>
+      <p class="hintbox ${P.hint ? '' : 'off'}" id="hint" lang="en">${hintText(s[1], P.hint)}</p>
       <p class="heard" id="heard" lang="en" aria-live="polite">${esc(P.heard)}</p>`;
     else if (!r) body = `<div class="res low"><p class="en" lang="en">${esc(s[1])}</p>
         <p class="heard-s">${P.noMic ? '마이크를 허용해 주세요' : SR ? '잘 안 들렸어요' : '이 브라우저는 음성 인식이 안 돼요 · Chrome 추천'}</p></div>`;
@@ -367,8 +377,10 @@ const V = {
     }
     return `<section class="scr speak">
       ${bar(P.i + (result ? 1 : 0), `${P.i + 1}/5`)}
-      <p class="cue">${P.phase === 'listen' ? wave() + '듣는 중' : rec ? '영어로 말해요' : ''}</p>
-      <h2 class="ko big" lang="ko">${kin(s[0])}</h2>
+      <p class="cue" id="cue">${cueText()}</p>
+      <div class="korow"><h2 class="ko big" lang="ko">${kin(s[0])}</h2>
+        <button class="spk tiny" data-a="again" aria-label="한국어 다시 듣기">${ico('vol', 18)}</button></div>
+      ${result ? '' : `<button class="hint center" data-a="shint">${ico('bulb', 18)}힌트</button>`}
       ${body}
       ${result ? `<div class="ctrl3">
         <button class="btn soft sq" data-a="answer" aria-label="정답 듣기">${ico('vol')}</button>
@@ -402,7 +414,8 @@ const V = {
         <div class="lmeter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="--from:${LS.prev}%;--to:${pct}%"></i></div>
         ${LS.combo >= 2 ? `<span class="chip combo">${flame()}${LS.combo}</span>` : ''}</div>
       ${it.miss && st === 'ask' ? '<p class="again">다시 나온 문제</p>' : ''}
-      <h2 class="qtype ${it.shown ? '' : 'anim'}">${QLABEL[it.t]}</h2>
+      <div class="qrow"><h2 class="qtype ${it.shown ? '' : 'anim'}">${QLABEL[it.t]}</h2>
+        ${st === 'ask' ? `<button class="hint" data-a="hint">${ico('bulb', 18)}힌트</button>` : ''}</div>
       <div class="lbody">${lessonBody(it)}</div>
       ${st === 'ask' ? `<div class="foot"><button class="btn big" data-a="check" ${canCheck(it) ? '' : 'disabled'}>확인</button></div>`
         : `<div class="fb ${st}" role="status">
@@ -540,7 +553,7 @@ async function play() {
       await wait(1000);
     }
   } else if (st === 'shadow') await wait(1200 + (s[1].split(' ').length * 450) / (S.slow ? 0.72 : 1)); // 직접 따라 말할 시간
-  else await say(s[1], st === 'en' ? g() : g(1));
+  else await say(s[1], g(repOf(L.step) - 1)); // 반복마다 남·여 번갈아 (녹음 있으면 녹음)
   await wait(350);
   if (id === run) next();
 }
@@ -555,25 +568,37 @@ function next() {
 }
 
 /* ── 5초 말하기 ── */
+const hintText = (en, n) => en.split(' ').map((w, j) => (j < n * 2 ? esc(w) : '<i class="gap-w"></i>')).join(' ');
+const cueText = () => (P.phase === 'listen' ? wave() + '듣는 중'
+  : P.phase === 'tap' ? '마이크를 눌러 말해요'
+  : P.phase === 'rec' ? (P.live ? '지금 말하세요' : '준비 중…') : '');
 async function speakItem() {
-  Object.assign(P, { phase: 'listen', heard: '', res: null, noMic: false });
+  Object.assign(P, { phase: 'listen', heard: '', res: null, noMic: false, hint: 0 });
   go('speak');
   const id = ++run;
   await say(T[P.i][0], 'ko');
+  await wait(250); // 스피커 소리 꼬리가 마이크에 들어가지 않게
   if (id === run) listen(id);
 }
 function listen(id) {
   const target = T[P.i][1];
-  Object.assign(P, { phase: 'rec', heard: '', res: null });
+  Object.assign(P, { phase: 'rec', heard: '', res: null, live: false });
   render();
-  sfx('pop'); buzz(15);
   if (!SR) { setTimeout(() => id === run && finish(''), 5000); return; }
   const r = (P.rec = new SR());
   r.lang = 'en-US';
   r.interimResults = true;
-  r.continuous = true;
+  r.continuous = false; // 한 문장 말하고 멈추면 바로 끝남 (모바일에서 더 안정적)
   r.maxAlternatives = 5;
   let best = '';
+  // 마이크가 실제로 켜진 뒤에 안내·타이머 시작
+  r.onaudiostart = () => {
+    if (id !== run) return;
+    P.live = true;
+    $('.micwrap')?.classList.add('on');
+    const c = $('#cue'); if (c) c.textContent = cueText();
+    sfx('pop'); buzz(15);
+  };
   r.onresult = e => {
     const R = [...e.results];
     // 후보 문장 여러 개 중 정답에 가장 가까운 것을 고른다
@@ -585,9 +610,15 @@ function listen(id) {
     if (R.every(x => x.isFinal) && score(target, best).pct === 100) r.stop();
   };
   r.onerror = e => { if (/not-allowed|service-not-allowed|audio-capture/.test(e.error)) P.noMic = true; };
-  const t = setTimeout(() => r.stop(), 5500);
-  r.onend = () => { clearTimeout(t); if (id === run) finish(best); };
-  try { r.start(); } catch { clearTimeout(t); finish(''); }
+  const t = setTimeout(() => r.stop(), 9000);
+  r.onend = () => {
+    clearTimeout(t);
+    if (id !== run) return;
+    // 자동 시작이 막힌 브라우저(iOS 등)는 한 번은 '눌러서 말하기'로 다시 기회
+    if (!best && P.noMic && !P.tapped) { P.phase = 'tap'; P.tapped = true; P.noMic = false; return render(); }
+    finish(best);
+  };
+  try { r.start(); } catch { clearTimeout(t); P.phase = 'tap'; P.tapped = true; render(); }
 }
 function finish(text) {
   const s = T[P.i];
@@ -698,6 +729,32 @@ const ACT = {
     if (P.phase === 'rec') return P.rec?.stop();
     const id = ++run; hush(); listen(id);
   },
+  again: () => {
+    const id = ++run; P.rec?.abort?.();
+    P.phase = 'listen'; P.res = null; P.heard = ''; render();
+    say(T[P.i][0], 'ko').then(() => wait(250)).then(() => id === run && listen(id));
+  },
+  shint: () => {
+    P.hint = Math.min(P.hint + 1, Math.ceil(T[P.i][1].split(' ').length / 2));
+    const h = $('#hint'); if (h) { h.innerHTML = hintText(T[P.i][1], P.hint); h.classList.remove('off'); }
+  },
+  sayq: () => say(T[LS.q[0].k][0], 'ko'),
+  hint: () => {
+    const it = LS.q[0], s = T[it.k];
+    if (LS.state !== 'ask') return;
+    it.hinted = true;
+    if (it.t === 'build') { // 다음에 올 단어 하나를 채워 줌
+      const ans = words(s[1]);
+      let n = 0;
+      while (n < it.built.length && n < ans.length && it.tiles[it.built[n]] === ans[n]) n++;
+      if (n < ans.length) {
+        const keep = it.built.slice(0, n), i = it.tiles.findIndex((w, j) => w === ans[n] && !keep.includes(j));
+        it.built = [...keep, i];
+        say(ans[n], 'f');
+      }
+    }
+    render();
+  },
   retry: () => { const id = ++run; hush(); listen(id); },
   answer: () => say(T[P.i][1], 'f'),
   snext: () => { if (P.i < 4) { P.i++; speakItem(); } else complete(); },
@@ -746,7 +803,7 @@ const ACT = {
     hush();
     if (isRight(it)) {
       LS.state = 'good'; LS.solved++; LS.combo++; LS.best = Math.max(LS.best, LS.combo);
-      if (!it.miss) LS.first++;
+      if (!it.miss && !it.hinted) LS.first++;
       LS.msg = LS.combo >= 3 ? `${LS.combo}연속 정답!` : pickOne(PRAISE);
       sfx('ok'); buzz([15, 40, 15]);
       if (LS.combo >= 3) setTimeout(() => sfx('combo', LS.combo), 450);
