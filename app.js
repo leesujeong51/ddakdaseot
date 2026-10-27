@@ -14,7 +14,7 @@ const words = en => en.split(' ').map(w => (/^[ap]\.m\.$/i.test(w) ? w : w.repla
 
 /* ── 저장 ── */
 const KEY = 'ddak5.v1';
-const BASE = { points: 0, done: [], reps: 3, slow: false, sound: true, unit: 0, n: {}, fin: null, spun: {}, just: null };
+const BASE = { points: 0, done: [], reps: 3, slow: false, sound: true, unit: 0, n: {}, fin: null, spun: {}, just: null, saved: [], tickets: 0, pass: {} };
 let S = { ...BASE };
 try { S = { ...BASE, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch {}
 S.slow = false; // 예전에 저장된 '천천히'도 원속도로
@@ -24,7 +24,11 @@ if (S.fin && S.fin < today()) { S.unit++; S.n = {}; S.fin = null; }
 save();
 
 const cur = () => DAYS[S.unit % DAYS.length];
-const fin = () => { if (S.n.learn && S.n.lesson && !S.fin) S.fin = today(); };
+const fin = () => { if (S.n.learn && S.n.lesson && ((S.unit + 1) % 7 || S.n.review) && !S.fin) S.fin = today(); };
+// 저장 문장 키 "DAYS번호-문장번호"
+const keyOf = n => `${S.unit % DAYS.length}-${n}`;
+const savedRows = () => S.saved.map(k => { const [d, n] = k.split('-'); return DAYS[d]?.[n]; }).filter(Boolean);
+const reviewPool = () => Array.from({ length: 7 }, (_, j) => DAYS[(((S.unit - j) % DAYS.length) + DAYS.length) % DAYS.length]).flat();
 function streak() {
   const has = new Set(S.done), d = new Date();
   if (!has.has(iso(d))) d.setDate(d.getDate() - 1);
@@ -150,6 +154,11 @@ const ICON = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   star: '<path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9z" fill="currentColor" stroke-width="1.5"/>',
   bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
+  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+  ticket: '<path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 7v10" stroke-dasharray="2 2"/>',
+  mark: '<path d="M6 3h12v18l-6-4-6 4z"/>',
+  marked: '<path d="M6 3h12v18l-6-4-6 4z" fill="currentColor"/>',
   chest: '<path d="M3 11a9 6 0 0 1 18 0v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor" fill-opacity=".25"/><path d="M3 12h18"/><rect x="10" y="10" width="4" height="5" rx="1" fill="currentColor"/>',
 };
 const ico = (n, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
@@ -171,9 +180,11 @@ const buddy = (mood = 'happy', s = 72) => `<svg class="buddy ${mood}" width="${s
 const wave = () => `<span class="wave" aria-hidden="true">${[0, 1, 2, 3].map(i => `<b style="--i:${i}"></b>`).join('')}</span>`;
 const nav = c => `<nav class="nav" aria-label="메뉴">${[['home', 'home', '홈'], ['expr', 'book', '표현'], ['record', 'chart', '기록']]
   .map(([k, i, l]) => `<button data-a="tab" data-v="${k}" ${c === k ? 'aria-current="page"' : ''}>${ico(i)}<span>${l}</span></button>`).join('')}</nav>`;
-const bar = (p, label) => `<div class="bar"><button class="icon-btn" data-a="quit" aria-label="닫기">${ico('x')}</button>
+// n = 지금 문장 번호를 주면 저장(북마크) 버튼을 함께 그림
+const markBtn = n => { const on = S.saved.includes(keyOf(n)); return `<button class="icon-btn mark ${on ? 'on' : ''}" data-a="mark" data-v="${n}" aria-pressed="${on}" aria-label="문장 저장">${ico(on ? 'marked' : 'mark', 20)}</button>`; };
+const bar = (p, label, n) => `<div class="bar"><button class="icon-btn" data-a="quit" aria-label="닫기">${ico('x')}</button>
   <div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${Math.floor(p)}">${[0, 1, 2, 3, 4].map(k => `<i><b style="width:${Math.max(0, Math.min(1, p - k)) * 100}%"></b></i>`).join('')}</div>
-  <span class="lbl">${label}</span></div>`;
+  <span class="lbl">${label}</span>${n != null ? markBtn(n) : ''}</div>`;
 const PRAISE = ['좋아요!', '완벽해요!', '대단해요!', '멋져요!', '바로 그거예요!', '천재인가요?'];
 const CHEER = ['아쉬워요', '거의 다 왔어요', '괜찮아요, 다시 나와요'];
 
@@ -190,41 +201,95 @@ const STEPS = ['ko', 'think', 'en', 'shadow', 'en', 'shadow', 'en', 'shadow'];
 const STEP_L = ['한국어', '생각', '영어', '따라'];
 const pillOf = step => Math.min(step, 2 + ((step - 2) % 2)); // 단계 → 표시할 버튼 번호
 const repOf = step => Math.max(1, Math.floor((step - 2) / 2) + 1); // 영어·따라 몇 번째(1~3)
-const SEG = [10, 30, 20, 100, 10, 50, 20, 0]; // 0 = 한 번 더
+const SEG = [10, 30, 20, 100, -1, 50, 20, 0]; // 0 = 한 번 더, -1 = 이용권
+const FREE_DAYS = 15, PASS_COST = 200; // 무료 기간 · 포인트로 하루 열기
 const W = { a: 0, v: 0, on: false, stop: false, dec: 0, last: 0, seg: 0, auto: 0 };
 const g = (o = 0) => ((L.i + L.round + o) % 2 ? 'm' : 'f');
 
 /* ── 학습 경로(듀오링고식) ── */
 const KINDS = [['learn', 'star', '오늘의 5문장'], ['lesson', 'book', '표현 레슨'], ['chest', 'chest', '보물상자']];
+const REVIEW = ['review', 'trophy', '7일 복습'];
+const isReviewDay = u => (u + 1) % 7 === 0;
+const kindsOf = u => (isReviewDay(u) ? [...KINDS, REVIEW] : KINDS);
+const gated = u => u >= FREE_DAYS && !S.pass[u];
 function nodeState(u, kind) {
   if (u < S.unit) return 'done';
+  // 오늘 것을 끝냈으면 다음 일차를 바로 열 수 있음(이용권·포인트·광고)
+  if (u === S.unit + 1 && S.fin && kind === 'learn') return 'gate';
   if (u > S.unit) return 'lock';
   if (S.n[kind]) return 'done';
-  const first = KINDS.find(([k]) => !S.n[k]);
+  if (gated(u)) return kind === 'learn' ? 'gate' : 'lock';
+  const first = kindsOf(u).find(([k]) => !S.n[k]);
   return first && first[0] === kind ? 'open' : 'lock';
 }
+const NODE_IC = { lock: 'lock', gate: 'key' };
 function path() {
   const base = Math.floor(S.unit / 10) * 10, t = today();
   let html = '', i = 0;
   for (let u = base; u < base + 10; u++) {
-    if (u > base) html += `<div class="divider"><span>${u + 1}일차</span></div>`;
-    for (const [kind, icon, label] of KINDS) {
+    if (u > base) html += `<div class="divider"><span>${u + 1}일차${u >= FREE_DAYS ? ' · ' + ico('key', 14) : ''}</span></div>`;
+    if (u === S.unit) html += coach();
+    for (const [kind, icon, label] of kindsOf(u)) {
       const st = nodeState(u, kind), x = Math.round(Math.sin(i++ * 0.9) * 70);
       const guard = kind === 'learn' && streak() > 0 && !S.done.includes(t);
+      const ic = NODE_IC[st] && kind !== 'chest' ? NODE_IC[st] : st === 'done' && kind !== 'chest' ? 'check' : icon;
       html += `<div class="node-row" style="--x:${x}px">
-        ${st === 'open' ? `<span class="bubble">${guard ? `${flame(14)} ${streak()}일 지키기` : 'START'}</span>
-          <span class="mascot" style="${x > 0 ? 'right' : 'left'}:calc(100% + 18px)">${buddy('happy', 64)}</span>` : ''}
+        ${st === 'open' || st === 'gate' ? `<span class="bubble">${st === 'gate' ? `${ico('key', 14)} 열기` : guard ? `${flame(14)} ${streak()}일 지키기` : 'START'}</span>` : ''}
         <button class="node ${kind} ${st} ${S.just === kind && u === S.unit ? 'just' : ''}" data-a="node" data-v="${kind}:${u}"
-          aria-label="${u + 1}일차 ${label}${st === 'done' ? ' 완료' : st === 'lock' ? ' 잠김' : ''}">${ico(st === 'lock' && kind !== 'chest' ? 'lock' : st === 'done' && kind !== 'chest' ? 'check' : icon, 34)}</button>
+          aria-label="${u + 1}일차 ${label}${st === 'done' ? ' 완료' : st === 'lock' ? ' 잠김' : st === 'gate' ? ' 열기' : ''}">${ico(ic, 34)}</button>
       </div>`;
     }
   }
   return html;
 }
+
+/* ── 마스코트 코치: 진도에 맞춘 한마디 + 모션 ── */
+const learnedS = () => (S.unit + (S.n.learn ? 1 : 0)) * 5;
+const learnedX = () => (S.unit + (S.n.lesson ? 1 : 0)) * 5;
+function coachLines() {
+  const day = S.unit + 1, s = learnedS(), x = learnedX(), st = streak(), L = [];
+  if (S.fin) L.push('오늘 목표 달성! 내일 또 만나요', '더 하고 싶다면 다음 일차를 열어 봐요');
+  else if (S.n.learn && !S.n.lesson) L.push('표현 레슨만 하면 오늘 끝!');
+  if (day === 1 && !S.n.learn) L.push('시작이 반이에요!', '오늘은 딱 5문장만 해 봐요');
+  if (day > 1 && day % 5 === 0) L.push(`벌써 ${day}일차! ${s}문장을 외웠어요`);
+  if (isReviewDay(S.unit) && !S.n.review) L.push('오늘은 복습하는 날! 지난 7일을 다시 봐요');
+  if (gated(S.unit)) L.push(`무료 ${FREE_DAYS}일 완주! 열쇠로 다음 날을 열어요`);
+  if (s) L.push(`지금까지 ${s}문장, 표현 ${x}개를 공부했어요`);
+  if (st >= 2) L.push(`${st}일 연속! 이 기세 그대로 🔥`);
+  if (S.saved.length) L.push(`저장한 문장 ${S.saved.length}개, 기록에서 다시 봐요`);
+  L.push('달라질 당신이 기대돼요', '오늘의 5문장이 내일의 대화가 돼요', '천천히, 그래도 꾸준히!', `${day}일차도 화이팅!`);
+  return [...new Set(L)];
+}
+const coach = () => `<div class="coach"><button class="coach-buddy" data-a="buddy" aria-label="다섯이">${buddy('happy', 76)}</button>
+  <p class="coach-say" id="coach" aria-live="polite"></p></div>`;
+let coachT = 0, coachI = 0;
+function coachSay(text) {
+  const el = $('#coach');
+  if (!el) return;
+  clearInterval(coachT);
+  el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+  if (reduce) { el.textContent = text; return; }
+  let n = 0; // 한 글자씩 타자 효과
+  coachT = setInterval(() => { el.textContent = text.slice(0, ++n); if (n >= text.length) clearInterval(coachT); }, 45);
+}
+function coachLoop() {
+  const lines = coachLines();
+  coachSay(lines[coachI++ % lines.length]);
+}
+setInterval(() => screen === 'home' && !document.hidden && coachLoop(), 6000);
+
 function popHtml(kind, u) {
   const st = nodeState(u, kind);
-  if (st === 'lock') return `<div class="pop lock" data-v="${kind}:${u}"><b>${u > S.unit ? `${u + 1}일차` : KINDS.find(k => k[0] === kind)[2]}</b>
+  if (st === 'gate') return `<div class="pop" data-v="${kind}:${u}"><b>${u + 1}일차 열기</b>
+    <p>${u > S.unit ? '오늘 몫은 끝! 하루 더 공부해요' : `무료 ${FREE_DAYS}일 완주! 하나를 골라 열어요`}</p>
+    <button class="btn big" data-a="unlock" data-v="ticket:${u}" ${S.tickets ? '' : 'disabled'}>${ico('ticket', 20)} 이용권 쓰기 · ${S.tickets}장</button>
+    <button class="btn big" data-a="unlock" data-v="points:${u}" ${S.points >= PASS_COST ? '' : 'disabled'}><i class="gem"></i> ${PASS_COST}P로 열기</button>
+    <button class="btn big" data-a="unlock" data-v="ad:${u}">${ico('play', 18)} 광고 보고 열기</button></div>`;
+  if (st === 'lock') return `<div class="pop lock" data-v="${kind}:${u}"><b>${u > S.unit ? `${u + 1}일차` : kindsOf(u).find(k => k[0] === kind)[2]}</b>
     <p>${u > S.unit ? '내일 열려요 · 오늘 것을 끝내 두세요' : '앞 단계를 먼저 끝내요'}</p></div>`;
+  if (kind === 'review') return `<div class="pop" data-v="${kind}:${u}"><b>7일 복습</b>
+    <p>${st === 'done' ? '다시 풀면 +5P' : '지난 7일 35문장에서 12문제 · +30P'}</p>
+    <button class="btn big" data-a="review">${st === 'done' ? '다시 하기' : 'START'}</button></div>`;
   if (kind === 'learn') return `<div class="pop" data-v="${kind}:${u}"><b>${u + 1}일차 · 오늘의 5문장</b>
     <p>${st === 'done' ? '복습하면 +10P' : `약 <span id="mins">${mins()}</span>분 · +50P`}</p>
     <div class="seg" role="radiogroup" aria-label="반복 횟수" style="--idx:${S.reps - 1}">${[1, 2, 3].map(n => `<button role="radio" aria-checked="${S.reps === n}" data-a="reps" data-v="${n}">${n}회</button>`).join('')}</div>
@@ -249,7 +314,7 @@ function openChest(btn) {
 const TYPES = ['build', 'listen', 'fill', 'meaning'];
 const QLABEL = { build: '영어로 만들어요', listen: '듣고 뜻을 골라요', fill: '빈칸을 채워요', meaning: '이 표현의 뜻은?' };
 function makeItem(t, k) {
-  const day = cur(), s = day[k], others = day.filter((_, j) => j !== k);
+  const day = T, s = day[k], others = day.filter((_, j) => j !== k); // T = 이번 레슨의 문장 묶음
   if (t === 'build') {
     const ans = words(s[1]), low = new Set(ans.map(w => w.toLowerCase()));
     const extra = shuffle([...new Set(others.flatMap(x => words(x[1])))].filter(w => w.length > 1 && !low.has(w.toLowerCase()))).slice(0, 3);
@@ -266,10 +331,13 @@ function makeItem(t, k) {
   const pool = [...new Set(others.flatMap(x => words(x[1])))].filter(w => w.length > 2 && w.toLowerCase() !== ans.toLowerCase());
   return { t, k, toks, blank: b, ans, opts: shuffle([ans, ...shuffle(pool).slice(0, 2)]), pick: null };
 }
-function startLesson() {
-  T = cur();
-  const q = shuffle([0, 1, 2, 3, 4].flatMap(k => shuffle(TYPES).slice(0, 2).map(t => makeItem(t, k))));
-  LS = { q, n: q.length, solved: 0, first: 0, combo: 0, best: 0, t0: Date.now(), state: 'ask', prev: 0 };
+// mode: lesson(오늘 표현) · review(지난 7일) · saved(저장한 문장)
+function startLesson(mode = 'lesson', pool = cur()) {
+  T = pool;
+  const q = pool.length <= 5
+    ? shuffle(pool.flatMap((_, k) => shuffle(TYPES).slice(0, 2).map(t => makeItem(t, k))))
+    : shuffle(pool.map((_, k) => k)).slice(0, 12).map(k => makeItem(pickOne(TYPES), k));
+  LS = { mode, q, n: q.length, solved: 0, first: 0, combo: 0, best: 0, t0: Date.now(), state: 'ask', prev: 0 };
   sfx('start');
   go('lesson');
 }
@@ -324,6 +392,7 @@ const V = {
           <div class="chips">
             <span class="chip" aria-label="연속 ${streak()}일">${flame()}${streak()}</span>
             <span class="chip" aria-label="포인트"><i class="gem"></i>${S.points.toLocaleString()}</span>
+            ${S.tickets ? `<span class="chip ticket" aria-label="이용권 ${S.tickets}장">${ico('ticket', 18)}${S.tickets}</span>` : ''}
             <button class="chip" data-a="sound" aria-pressed="${S.sound}" aria-label="소리·진동">${ico(S.sound ? 'vol' : 'mute', 18)}</button>
           </div></header>
         <div class="unit glow"><div><small>${S.unit + 1}일차</small><b>오늘의 5문장</b></div>
@@ -335,7 +404,7 @@ const V = {
   learn: () => {
     const s = T[L.i], st = STEPS[L.step], en = L.step >= 2;
     return `<section class="scr">
-      ${bar(L.i + L.step / STEPS.length, `${L.round}/${S.reps}`)}
+      ${bar(L.i + L.step / STEPS.length, `${L.round}/${S.reps}`, L.i)}
       <ol class="steps" aria-label="단계">${STEP_L.map((t, k) => {
         const p = pillOf(L.step), rep = repOf(L.step);
         return `<li class="${k < p ? 'did' : k === p ? 'now' : ''}" ${k === p ? 'aria-current="step"' : ''}>${k < p && k < 2 ? ico('check', 14) : ''}${t}${k >= 2 ? `<small class="rep">${L.step >= 2 ? rep : 1}/3</small>` : ''}</li>`;
@@ -376,7 +445,7 @@ const V = {
         <p class="heard-s" lang="en">“${esc(P.heard)}”</p></div>`;
     }
     return `<section class="scr speak">
-      ${bar(P.i + (result ? 1 : 0), `${P.i + 1}/5`)}
+      ${bar(P.i + (result ? 1 : 0), `${P.i + 1}/5`, P.i)}
       <p class="cue" id="cue">${cueText()}</p>
       <div class="korow"><h2 class="ko big" lang="ko">${kin(s[0])}</h2>
         <button class="spk tiny" data-a="again" aria-label="한국어 다시 듣기">${ico('vol', 18)}</button></div>
@@ -402,7 +471,7 @@ const V = {
       ${got == null ? `<div class="wheel-wrap rise" style="--d:5"><i class="pointer"></i><svg class="wheel" id="wheel" viewBox="0 0 200 200" role="img" aria-label="보상 룰렛">${wheel()}</svg></div>
         <p class="spinres" id="spinres" aria-live="polite"></p>
         <button class="btn big spin" id="spin" data-a="spin">START</button>`
-        : `<p class="spinres show">오늘 룰렛 +${got}P</p>`}
+        : `<p class="spinres show">오늘 룰렛 ${got < 0 ? '이용권 +1' : `+${got}P`}</p>`}
       <button class="btn soft big" data-a="tab" data-v="home">계속</button>
     </section>`;
   },
@@ -428,7 +497,7 @@ const V = {
 
   lend: () => `<section class="scr done">
       ${buddy('cheer', 110)}
-      <h1 class="mega">${kin(E.acc === 100 ? '완벽해요!' : '레슨 완료!')}</h1>
+      <h1 class="mega">${kin(E.acc === 100 ? '완벽해요!' : LS.mode === 'review' ? '복습 완료!' : '레슨 완료!')}</h1>
       <div class="tiles3 rise" style="--d:3">
         <div class="t3 gold"><small>획득</small><b>+<span data-count="${E.gain}">0</span>P</b></div>
         <div class="t3 green"><small>정확도</small><b><span data-count="${E.acc}">0</span>%</b></div>
@@ -476,6 +545,15 @@ const V = {
         ${'일월화수목금토'.split('').map(x => `<span class="wd">${x}</span>`).join('')}${'<span></span>'.repeat(first)}
         ${Array.from({ length: days }, (_, k) => { const x = iso(new Date(y, m, k + 1)); return `<span class="c ${has.has(x) ? 'on' : ''} ${x === t ? 'now' : ''}" style="--i:${k}">${k + 1}</span>`; }).join('')}
       </div></div>
+      <div class="saved rise" style="--d:4">
+        <div class="saved-h"><h2>${ico('marked', 18)} 저장한 문장 <small>${S.saved.length}</small></h2>
+          ${S.saved.length >= 3 ? `<button class="btn" data-a="savedStudy">다시 공부 ${ico('next', 18)}</button>` : ''}</div>
+        ${S.saved.length ? `<ol class="list">${savedRows().map((x, k) => `<li class="item" style="--i:${k}">
+            <button class="srow" data-a="sayrow" data-v="${k}" aria-label="듣기"><span lang="ko">${esc(x[0])}</span><small lang="en">${esc(x[1])}</small></button>
+            <button class="icon-btn" data-a="unmark" data-v="${S.saved[k]}" aria-label="저장 취소">${ico('x', 18)}</button></li>`).join('')}</ol>
+            ${S.saved.length < 3 ? '<p class="muted">3개 이상 모으면 다시 공부할 수 있어요</p>' : ''}`
+          : `<p class="muted">학습 중 ${ico('mark', 16)} 를 누르면 여기에 모여요</p>`}
+      </div>
     </section>${nav('record')}`;
   },
 };
@@ -486,7 +564,7 @@ function wheel() {
   return SEG.map((v, k) => {
     const a0 = ((k * 45 - 22.5 - 90) * Math.PI) / 180, [bg, fg] = C[k % 4];
     return `<path d="M100 100L${pt(a0)}A96 96 0 0 1 ${pt(a0 + Math.PI / 4)}Z" style="fill:${bg};stroke:var(--card);stroke-width:2"/>
-      <text x="100" y="36" transform="rotate(${k * 45} 100 100)" text-anchor="middle" style="fill:${fg}" font-weight="800" font-size="${v ? 15 : 22}">${v ? v + 'P' : '↻'}</text>`;
+      <text x="100" y="36" transform="rotate(${k * 45} 100 100)" text-anchor="middle" style="fill:${fg}" font-weight="800" font-size="${v > 0 ? 15 : v < 0 ? 13 : 22}">${v > 0 ? v + 'P' : v < 0 ? '이용권' : '↻'}</text>`;
   }).join('') + '<circle cx="100" cy="100" r="16" style="fill:var(--card);stroke:var(--primary);stroke-width:4"/>';
 }
 
@@ -507,6 +585,7 @@ function render() {
     app.innerHTML = V[screen]();
     app.querySelectorAll('[data-count]').forEach(countUp);
     if (screen === 'home') {
+      coachI = 0; setTimeout(coachLoop, 500);
       $('.node.just, .node.open')?.scrollIntoView({ block: 'center' });
       if (S.just) { S.just = null; save(); }
     }
@@ -669,8 +748,9 @@ function land() {
     sfx('pop');
     btn.disabled = false; btn.textContent = 'START'; btn.classList.remove('stop');
   } else {
-    S.points += v; S.spun[today()] = v; save();
-    out.textContent = `+${v}P`;
+    if (v < 0) S.tickets++; else S.points += v;
+    S.spun[today()] = v; save();
+    out.textContent = v < 0 ? '이용권 +1' : `+${v}P`;
     btn.remove();
     sfx(v >= 50 ? 'fanfare' : 'coin'); buzz([30, 40, 80]); confetti();
   }
@@ -706,6 +786,36 @@ const ACT = {
   sayko: v => say(cur()[+v][0], 'ko'),
   start: () => { T = cur(); S.slow = false; L = { round: 1, i: 0, step: 0, paused: false }; sfx('start'); buzz(20); go('learn'); play(); },
   lesson: () => startLesson(),
+  review: () => startLesson('review', reviewPool()),
+  savedStudy: () => startLesson('saved', savedRows()),
+  sayrow: v => say(savedRows()[+v][1], 'f'),
+  mark: v => {
+    const k = keyOf(+v), on = !S.saved.includes(k);
+    S.saved = on ? [...S.saved, k] : S.saved.filter(x => x !== k);
+    save();
+    const b = $('[data-a=mark]');
+    if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); b.innerHTML = ico(on ? 'marked' : 'mark', 20); }
+    if (on) { sfx('coin'); buzz([10, 30, 10]); } else sfx('tap');
+  },
+  unmark: v => { S.saved = S.saved.filter(x => x !== v); save(); render(); },
+  buddy: () => {
+    const b = $('.coach-buddy');
+    b?.classList.remove('hop'); void b?.offsetWidth; b?.classList.add('hop');
+    sfx('pop'); buzz(15);
+    coachLoop();
+  },
+  unlock: v => {
+    const [how, u] = v.split(':');
+    const open = () => {
+      S.pass[+u] = true;
+      if (+u === S.unit + 1) { S.unit++; S.n = {}; S.fin = null; } // 오늘 하루 더
+      S.just = 'learn-open'; save();
+      sfx('fanfare'); buzz([30, 40, 80]); confetti(); render();
+    };
+    if (how === 'ticket' && S.tickets > 0) { S.tickets--; open(); }
+    else if (how === 'points' && S.points >= PASS_COST) { S.points -= PASS_COST; open(); }
+    else if (how === 'ad') showAd(open);
+  },
   reps: v => {
     S.reps = +v; save();
     const seg = $('.seg');
@@ -820,17 +930,35 @@ const ACT = {
     if (LS.state === 'bad') { LS.q.push(Object.assign(makeItem(it.t, it.k), { miss: true })); } // 틀린 문제는 끝에 다시
     LS.state = 'ask';
     if (LS.q.length) { sfx('tap'); return render(); }
-    const first = !S.n.lesson, acc = Math.round((LS.first / LS.n) * 100), sec = Math.round((Date.now() - LS.t0) / 1000);
-    const gain = first ? 20 + (acc === 100 ? 10 : 0) : 5;
+    const acc = Math.round((LS.first / LS.n) * 100), sec = Math.round((Date.now() - LS.t0) / 1000);
+    // 처음 끝낸 레슨·복습만 큰 보상, 다시 풀거나 저장 문장 공부는 +5P
+    const mode = LS.mode, first = mode !== 'saved' && !S.n[mode];
+    const gain = !first ? 5 : mode === 'review' ? 30 + (acc === 100 ? 20 : 0) : 20 + (acc === 100 ? 10 : 0);
     S.points += gain;
-    if (first) S.just = 'lesson';
-    S.n.lesson = true; fin(); save();
+    if (first) { S.just = mode; S.n[mode] = true; }
+    fin(); save();
     E = { gain, acc, best: LS.best, time: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` };
     go('lend');
     sfx('fanfare'); buzz([30, 40, 30, 40, 90]); setTimeout(confetti, 300);
   },
 };
-const OWN_SOUND = new Set(['node', 'spin', 'check', 'start', 'lesson', 'sound', 'cont']);
+const OWN_SOUND = new Set(['node', 'spin', 'check', 'start', 'lesson', 'review', 'savedStudy', 'sound', 'cont', 'mark', 'buddy', 'unlock']);
+
+// shortcut: 테스트용 가짜 광고. 실제 배포 때는 Google Ad Manager 보상형 광고(GPT의 rewardedSlotGranted에서 onReward 호출)로 교체
+function showAd(onReward) {
+  const el = document.createElement('div');
+  el.className = 'ad-wrap';
+  el.innerHTML = `<div class="ad" role="dialog" aria-label="광고"><span class="ad-tag">광고 · 테스트</span>
+    <button class="icon-btn ad-x" aria-label="닫기(보상 없음)">${ico('x')}</button>
+    ${buddy('cheer', 96)}<p>광고가 여기에 나와요</p><b class="ad-sec">5</b>
+    <button class="btn big" disabled>보상 받기</button></div>`;
+  document.body.appendChild(el);
+  const sec = el.querySelector('.ad-sec'), ok = el.querySelector('.btn');
+  let n = 5;
+  const t = setInterval(() => { sec.textContent = --n || ''; if (n <= 0) { clearInterval(t); ok.disabled = false; sfx('coin'); } }, 1000);
+  el.querySelector('.ad-x').onclick = () => { clearInterval(t); el.remove(); };
+  ok.onclick = () => { el.remove(); onReward(); };
+}
 
 app.addEventListener('click', e => {
   const b = e.target.closest('[data-a]');
